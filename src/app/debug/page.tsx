@@ -8,6 +8,12 @@ interface ApiResponse {
     status?: number;
 }
 
+interface AudioResponse {
+    audioUrl?: string;
+    error?: string;
+    status?: number;
+}
+
 export default function DebugPage() {
     // State for each API endpoint
     const [textToSsmlState, setTextToSsmlState] = useState({
@@ -25,9 +31,8 @@ export default function DebugPage() {
 
     const [generateVoiceState, setGenerateVoiceState] = useState({
         ssml: '<speak>Hello world, this is a test message for speech synthesis.</speak>',
-        voiceId: '',
         loading: false,
-        result: null as ApiResponse | null,
+        result: null as AudioResponse | null,
     });
 
     const [checkClipState, setCheckClipState] = useState({
@@ -110,12 +115,25 @@ export default function DebugPage() {
                 }),
             });
 
-            const data = await response.json();
-            setGenerateVoiceState(prev => ({
-                ...prev,
-                loading: false,
-                result: { data, status: response.status, error: response.ok ? undefined : data.error }
-            }));
+            if (response.ok && response.headers.get('content-type')?.includes('audio/wav')) {
+                // Handle streaming audio response
+                const audioBlob = await response.blob();
+                const audioUrl = URL.createObjectURL(audioBlob);
+
+                setGenerateVoiceState(prev => ({
+                    ...prev,
+                    loading: false,
+                    result: { audioUrl, status: response.status }
+                }));
+            } else {
+                // Handle error response (should be JSON)
+                const data = await response.json();
+                setGenerateVoiceState(prev => ({
+                    ...prev,
+                    loading: false,
+                    result: { error: data.error || 'Unknown error', status: response.status }
+                }));
+            }
         } catch (error) {
             setGenerateVoiceState(prev => ({
                 ...prev,
@@ -206,6 +224,52 @@ export default function DebugPage() {
         );
     };
 
+    const renderAudioResult = (result: AudioResponse | null) => {
+        if (!result) return null;
+
+        return (
+            <div className="mt-4 p-4 border rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium">Response</h4>
+                    {result.status && (
+                        <span className={`px-2 py-1 rounded text-sm font-medium ${result.status >= 200 && result.status < 300
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                            }`}>
+                            {result.status}
+                        </span>
+                    )}
+                </div>
+
+                {result.error ? (
+                    <div className="bg-red-50 border border-red-200 rounded p-3">
+                        <p className="text-red-700 font-medium">Error:</p>
+                        <p className="text-red-600 text-sm">{result.error}</p>
+                    </div>
+                ) : result.audioUrl ? (
+                    <div className="bg-green-50 border border-green-200 rounded p-3">
+                        <p className="text-green-700 font-medium mb-3">Audio Generated Successfully!</p>
+                        <div className="space-y-3">
+                            <audio controls className="w-full">
+                                <source src={result.audioUrl} type="audio/wav" />
+                                Your browser does not support the audio element.
+                            </audio>
+                            <div className="flex space-x-2">
+                                <a
+                                    href={result.audioUrl}
+                                    download="generated-voice.wav"
+                                    className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+                                >
+                                    Download Audio
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+        );
+    };
+
     return (
         <div className="min-h-screen bg-gray-50 py-8 px-4">
             <div className="max-w-6xl mx-auto">
@@ -284,7 +348,7 @@ export default function DebugPage() {
 
                     {/* Generate Voice */}
                     <div className="bg-white rounded-lg shadow p-6">
-                        <h2 className="text-xl font-semibold mb-4 text-purple-600">3. Generate Voice</h2>
+                        <h2 className="text-xl font-semibold mb-4 text-purple-600">3. Generate Voice (Streaming)</h2>
                         <p className="text-sm text-gray-600 mb-4">POST /api/generate-voice</p>
 
                         <div className="space-y-4">
@@ -298,27 +362,16 @@ export default function DebugPage() {
                                 />
                             </div>
 
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Voice ID (Optional)</label>
-                                <input
-                                    type="text"
-                                    value={generateVoiceState.voiceId}
-                                    onChange={(e) => setGenerateVoiceState(prev => ({ ...prev, voiceId: e.target.value }))}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                                    placeholder="Resemble AI Voice ID"
-                                />
-                            </div>
-
                             <button
                                 onClick={testGenerateVoice}
                                 disabled={generateVoiceState.loading}
                                 className="w-full bg-purple-600 text-white py-2 px-4 rounded-md hover:bg-purple-700 disabled:opacity-50"
                             >
-                                {generateVoiceState.loading ? 'Testing...' : 'Test Generate Voice'}
+                                {generateVoiceState.loading ? 'Generating Audio...' : 'Test Generate Voice'}
                             </button>
                         </div>
 
-                        {renderResult(generateVoiceState.result)}
+                        {renderAudioResult(generateVoiceState.result)}
                     </div>
 
                     {/* Check Clip Status */}
@@ -407,11 +460,23 @@ export default function DebugPage() {
                     <p className="text-sm text-yellow-700 mb-3">
                         Make sure you have the following environment variables configured:
                     </p>
-                    <ul className="text-sm text-yellow-700 space-y-1">
-                        <li>• <code className="bg-yellow-100 px-2 py-1 rounded">OPENAI_API_KEY</code></li>
-                        <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_API_KEY</code></li>
-                        <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_DEFAULT_VOICE_ID</code></li>
-                    </ul>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h4 className="font-medium text-yellow-800 mb-2">OpenAI (for translation)</h4>
+                            <ul className="text-sm text-yellow-700 space-y-1">
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">OPENAI_API_KEY</code></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="font-medium text-yellow-800 mb-2">Resemble AI (for voice generation)</h4>
+                            <ul className="text-sm text-yellow-700 space-y-1">
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_ENDPOINT</code></li>
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_TOKEN</code></li>
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_PROJECT_ID</code></li>
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_VOICE_ID</code></li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -32,7 +32,7 @@ Translated SSML:`;
             messages: [
                 {
                     role: 'system',
-                    content: 'You are an expert translator who specializes in preserving SSML markup while translating text content. You must maintain all SSML tags and attributes exactly as they are, only translating the text content within the tags.'
+                    content: 'You are an expert translator who specializes in preserving SSML markup while translating text content. You must maintain all SSML tags and attributes exactly as they are, only translating the text content within the tags. Make sure to update the <lang> tag to the target language.'
                 },
                 {
                     role: 'user',
