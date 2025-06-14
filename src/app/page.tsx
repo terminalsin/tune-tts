@@ -58,6 +58,14 @@ export default function Home() {
           <p className="text-sm text-gray-500 mt-2">
             Powered by Inflection AI • OpenAI GPT-4 • Resemble AI
           </p>
+          <div className="mt-4">
+            <a
+              href="/debug"
+              className="inline-flex items-center px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              🔧 Debug Console
+            </a>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-8 mb-8">

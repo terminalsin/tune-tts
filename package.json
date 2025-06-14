@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@resemble/node": "^3.4.2",
     "ai": "^4.3.16",
     "inflection-ai-sdk-provider": "^1.0.10",
     "next": "15.3.3",
