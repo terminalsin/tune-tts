@@ -12,13 +12,18 @@
     "@deepgram/sdk": "^4.4.0",
     "@resemble/node": "^3.4.2",
     "ai": "^4.3.16",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.3",
     "inflection-ai-sdk-provider": "^1.0.10",
+    "lucide-react": "^0.515.0",
     "next": "15.3.3",
     "openai": "^5.3.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^3.3.1",
+    "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -27,6 +32,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",
+    "tw-animate-css": "^1.3.4",
     "typescript": "^5"
   }
 }

@@ -92,6 +92,12 @@ export default function DebugPage() {
         result: null as { videoUrl?: string; error?: string; status?: number; metadata?: any } | null,
     });
 
+    const [downloadYouTubeState, setDownloadYouTubeState] = useState({
+        url: '',
+        loading: false,
+        result: null as { videoUrl?: string; error?: string; status?: number; metadata?: any } | null,
+    });
+
     // API call functions
     const testTextToSsml = async () => {
         setTextToSsmlState(prev => ({ ...prev, loading: true, result: null }));
@@ -506,6 +512,59 @@ export default function DebugPage() {
         }
     };
 
+    const testDownloadYouTube = async () => {
+        setDownloadYouTubeState(prev => ({ ...prev, loading: true, result: null }));
+
+        try {
+            if (!downloadYouTubeState.url) {
+                throw new Error('YouTube URL is required');
+            }
+
+            const response = await fetch('/api/download-youtube', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: downloadYouTubeState.url }),
+            });
+
+            if (response.ok && response.headers.get('content-type')?.includes('video/mp4')) {
+                // Handle video response
+                const videoBlob = await response.blob();
+                const videoUrl = URL.createObjectURL(videoBlob);
+
+                // Extract metadata from headers
+                const metadata = {
+                    videoTitle: response.headers.get('X-Video-Title'),
+                    videoDuration: response.headers.get('X-Video-Duration'),
+                    videoAuthor: response.headers.get('X-Video-Author'),
+                    videoViews: response.headers.get('X-Video-Views'),
+                    videoId: response.headers.get('X-Video-ID'),
+                    downloadSuccess: response.headers.get('X-Download-Success'),
+                    fileName: response.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'youtube-video.mp4'
+                };
+
+                setDownloadYouTubeState(prev => ({
+                    ...prev,
+                    loading: false,
+                    result: { videoUrl, status: response.status, metadata }
+                }));
+            } else {
+                // Handle error response (should be JSON)
+                const data = await response.json();
+                setDownloadYouTubeState(prev => ({
+                    ...prev,
+                    loading: false,
+                    result: { error: data.error || 'Unknown error', status: response.status }
+                }));
+            }
+        } catch (error) {
+            setDownloadYouTubeState(prev => ({
+                ...prev,
+                loading: false,
+                result: { error: error instanceof Error ? error.message : 'Unknown error' }
+            }));
+        }
+    };
+
     const renderResult = (result: ApiResponse | null) => {
         if (!result) return null;
 
@@ -781,6 +840,70 @@ export default function DebugPage() {
                                     className="inline-flex items-center px-4 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
                                 >
                                     📥 Download Injected Video
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+        );
+    };
+
+    const renderYouTubeDownloadResult = (result: { videoUrl?: string; error?: string; status?: number; metadata?: any } | null) => {
+        if (!result) return null;
+
+        return (
+            <div className="mt-4 p-4 border rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-medium">Response</h4>
+                    {result.status && (
+                        <span className={`px-2 py-1 rounded text-sm font-medium ${result.status >= 200 && result.status < 300
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                            }`}>
+                            {result.status}
+                        </span>
+                    )}
+                </div>
+
+                {result.error ? (
+                    <div className="bg-red-50 border border-red-200 rounded p-3">
+                        <p className="text-red-700 font-medium">Error:</p>
+                        <p className="text-red-600 text-sm">{result.error}</p>
+                    </div>
+                ) : result.videoUrl ? (
+                    <div className="bg-red-50 border border-red-200 rounded p-3">
+                        <p className="text-red-700 font-medium mb-3">YouTube Video Downloaded Successfully! 📺</p>
+
+                        {/* YouTube metadata */}
+                        {result.metadata && (
+                            <div className="mb-4 p-3 bg-red-100 rounded">
+                                <h5 className="font-medium text-red-800 mb-2">Video Info:</h5>
+                                <div className="text-sm text-red-700 space-y-1">
+                                    <p><strong>Title:</strong> {result.metadata.videoTitle}</p>
+                                    <p><strong>Author:</strong> {result.metadata.videoAuthor}</p>
+                                    <p><strong>Duration:</strong> {result.metadata.videoDuration}s ({Math.floor(parseInt(result.metadata.videoDuration) / 60)}:{(parseInt(result.metadata.videoDuration) % 60).toString().padStart(2, '0')})</p>
+                                    <p><strong>Views:</strong> {parseInt(result.metadata.videoViews).toLocaleString()}</p>
+                                    <p><strong>Video ID:</strong> {result.metadata.videoId}</p>
+                                    <p><strong>Output File:</strong> {result.metadata.fileName}</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Video player */}
+                        <div className="space-y-3">
+                            <video controls className="w-full max-w-lg mx-auto rounded-lg shadow-sm">
+                                <source src={result.videoUrl} type="video/mp4" />
+                                Your browser does not support the video element.
+                            </video>
+
+                            <div className="flex justify-center">
+                                <a
+                                    href={result.videoUrl}
+                                    download={result.metadata?.fileName || "youtube-video.mp4"}
+                                    className="inline-flex items-center px-4 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                >
+                                    📥 Download YouTube Video
                                 </a>
                             </div>
                         </div>
@@ -1128,9 +1251,64 @@ export default function DebugPage() {
                         {renderVideoResult(processVideoState.result)}
                     </div>
 
+                    {/* Download YouTube Video */}
+                    <div className="bg-white rounded-lg shadow p-6">
+                        <h2 className="text-xl font-semibold mb-4 text-red-600">9. Download YouTube Video (NEW! 📺)</h2>
+                        <p className="text-sm text-gray-600 mb-4">POST /api/download-youtube</p>
+                        <div className="bg-red-50 border border-red-200 rounded p-3 mb-4">
+                            <p className="text-sm text-red-700">
+                                <strong>🎯 What this does:</strong> Downloads any public YouTube video as an MP4 file.
+                                Perfect for getting videos to process through the TTS pipeline!
+                            </p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">YouTube URL</label>
+                                <input
+                                    type="url"
+                                    value={downloadYouTubeState.url}
+                                    onChange={(e) => setDownloadYouTubeState(prev => ({ ...prev, url: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    placeholder="https://www.youtube.com/watch?v=..."
+                                />
+                                {downloadYouTubeState.url && (
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        URL: {downloadYouTubeState.url.substring(0, 60)}{downloadYouTubeState.url.length > 60 ? '...' : ''}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
+                                <p className="text-xs text-yellow-700">
+                                    <strong>⚠️ Limits:</strong> Videos are limited to 10 minutes maximum for processing efficiency.
+                                    Only public videos are supported (no private, age-restricted, or unavailable videos).
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={testDownloadYouTube}
+                                disabled={downloadYouTubeState.loading || !downloadYouTubeState.url}
+                                className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 disabled:opacity-50 font-medium"
+                            >
+                                {downloadYouTubeState.loading ? (
+                                    <span className="flex items-center justify-center">
+                                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                        Downloading Video...
+                                    </span>
+                                ) : 'Download YouTube Video 📺'}
+                            </button>
+                        </div>
+
+                        {renderYouTubeDownloadResult(downloadYouTubeState.result)}
+                    </div>
+
                     {/* Extract Audio */}
                     <div className="bg-white rounded-lg shadow p-6">
-                        <h2 className="text-xl font-semibold mb-4 text-green-600">9. Extract Audio (NEW! 🎵)</h2>
+                        <h2 className="text-xl font-semibold mb-4 text-green-600">10. Extract Audio (NEW! 🎵)</h2>
                         <p className="text-sm text-gray-600 mb-4">POST /api/extract-audio</p>
                         <div className="bg-green-50 border border-green-200 rounded p-3 mb-4">
                             <p className="text-sm text-green-700">
@@ -1179,7 +1357,7 @@ export default function DebugPage() {
 
                     {/* Inject Audio */}
                     <div className="bg-white rounded-lg shadow p-6">
-                        <h2 className="text-xl font-semibold mb-4 text-purple-600">10. Inject Audio (NEW! 🎬🎵)</h2>
+                        <h2 className="text-xl font-semibold mb-4 text-purple-600">11. Inject Audio (NEW! 🎬🎵)</h2>
                         <p className="text-sm text-gray-600 mb-4">POST /api/inject-audio</p>
                         <div className="bg-purple-50 border border-purple-200 rounded p-3 mb-4">
                             <p className="text-sm text-purple-700">
@@ -1252,7 +1430,7 @@ export default function DebugPage() {
 
                     {/* Process Text (Full Pipeline) */}
                     <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
-                        <h2 className="text-xl font-semibold mb-4 text-gray-600">11. Process Text (Legacy Pipeline)</h2>
+                        <h2 className="text-xl font-semibold mb-4 text-gray-600">12. Process Text (Legacy Pipeline)</h2>
                         <p className="text-sm text-gray-600 mb-4">POST /api/process-text</p>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -1307,7 +1485,7 @@ export default function DebugPage() {
                     <p className="text-sm text-yellow-700 mb-3">
                         Make sure you have the following environment variables configured:
                     </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div>
                             <h4 className="font-medium text-yellow-800 mb-2">Deepgram (for speech-to-text)</h4>
                             <ul className="text-sm text-yellow-700 space-y-1">
@@ -1327,6 +1505,14 @@ export default function DebugPage() {
                                 <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_TOKEN</code></li>
                                 <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_PROJECT_ID</code></li>
                                 <li>• <code className="bg-yellow-100 px-2 py-1 rounded">RESEMBLE_VOICE_ID</code></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="font-medium text-yellow-800 mb-2">Dependencies (auto-installed)</h4>
+                            <ul className="text-sm text-yellow-700 space-y-1">
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">ytdl-core</code> - YouTube downloads</li>
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">ffmpeg-static</code> - Video processing</li>
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">fluent-ffmpeg</code> - FFmpeg wrapper</li>
                             </ul>
                         </div>
                     </div>

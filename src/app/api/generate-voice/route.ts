@@ -37,7 +37,7 @@ async function generateCompleteAudio(text: string): Promise<Uint8Array> {
         for await (const out of Resemble.v2.clips.stream(
             {
                 data: text,
-                sample_rate: 8000,
+                sample_rate: 22050,
                 precision: "PCM_16",
                 project_uuid: RESEMBLE_PROJECT_ID!,
                 voice_uuid: RESEMBLE_VOICE_ID!,
