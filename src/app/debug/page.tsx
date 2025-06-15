@@ -49,6 +49,28 @@ export default function DebugPage() {
         result: null as ApiResponse | null,
     });
 
+    const [transcribeAudioState, setTranscribeAudioState] = useState({
+        audioFile: null as File | null,
+        loading: false,
+        result: null as ApiResponse | null,
+    });
+
+    const [timingAwareSSMLState, setTimingAwareSSMLState] = useState({
+        transcript: 'Hello world, this is a test message for speech synthesis.',
+        wordTimings: [],
+        sentenceTimings: [],
+        loading: false,
+        result: null as ApiResponse | null,
+    });
+
+    const [processAudioState, setProcessAudioState] = useState({
+        audioFile: null as File | null,
+        targetLanguage: '',
+        voiceId: '',
+        loading: false,
+        result: null as ApiResponse | null,
+    });
+
     // API call functions
     const testTextToSsml = async () => {
         setTextToSsmlState(prev => ({ ...prev, loading: true, result: null }));
@@ -186,6 +208,109 @@ export default function DebugPage() {
             }));
         } catch (error) {
             setProcessTextState(prev => ({
+                ...prev,
+                loading: false,
+                result: { error: error instanceof Error ? error.message : 'Unknown error' }
+            }));
+        }
+    };
+
+    const testTranscribeAudio = async () => {
+        setTranscribeAudioState(prev => ({ ...prev, loading: true, result: null }));
+
+        try {
+            if (!transcribeAudioState.audioFile) {
+                throw new Error('No audio file selected');
+            }
+
+            const formData = new FormData();
+            formData.append('audio', transcribeAudioState.audioFile);
+
+            const response = await fetch('/api/transcribe-audio', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await response.json();
+            setTranscribeAudioState(prev => ({
+                ...prev,
+                loading: false,
+                result: { data, status: response.status, error: response.ok ? undefined : data.error }
+            }));
+
+            // Auto-populate timing-aware SSML test with results
+            if (data.success) {
+                setTimingAwareSSMLState(prev => ({
+                    ...prev,
+                    transcript: data.transcript,
+                    wordTimings: data.wordTimings,
+                    sentenceTimings: data.sentenceTimings
+                }));
+            }
+        } catch (error) {
+            setTranscribeAudioState(prev => ({
+                ...prev,
+                loading: false,
+                result: { error: error instanceof Error ? error.message : 'Unknown error' }
+            }));
+        }
+    };
+
+    const testTimingAwareSSML = async () => {
+        setTimingAwareSSMLState(prev => ({ ...prev, loading: true, result: null }));
+
+        try {
+            const response = await fetch('/api/text-to-ssml-with-timing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    transcript: timingAwareSSMLState.transcript,
+                    wordTimings: timingAwareSSMLState.wordTimings,
+                    sentenceTimings: timingAwareSSMLState.sentenceTimings
+                }),
+            });
+
+            const data = await response.json();
+            setTimingAwareSSMLState(prev => ({
+                ...prev,
+                loading: false,
+                result: { data, status: response.status, error: response.ok ? undefined : data.error }
+            }));
+        } catch (error) {
+            setTimingAwareSSMLState(prev => ({
+                ...prev,
+                loading: false,
+                result: { error: error instanceof Error ? error.message : 'Unknown error' }
+            }));
+        }
+    };
+
+    const testProcessAudio = async () => {
+        setProcessAudioState(prev => ({ ...prev, loading: true, result: null }));
+
+        try {
+            if (!processAudioState.audioFile) {
+                throw new Error('No audio file selected');
+            }
+
+            const formData = new FormData();
+            formData.append('audio', processAudioState.audioFile);
+            if (processAudioState.targetLanguage) formData.append('targetLanguage', processAudioState.targetLanguage);
+            if (processAudioState.voiceId) formData.append('voiceId', processAudioState.voiceId);
+
+            const response = await fetch('/api/process-audio', {
+                method: 'POST',
+                body: formData,
+            });
+
+            const data = await response.json();
+            setProcessAudioState(prev => ({
+                ...prev,
+                loading: false,
+                result: { data, status: response.status, error: response.ok ? undefined : data.error }
+            }));
+        } catch (error) {
+            setProcessAudioState(prev => ({
                 ...prev,
                 loading: false,
                 result: { error: error instanceof Error ? error.message : 'Unknown error' }
@@ -403,9 +528,133 @@ export default function DebugPage() {
                         {renderResult(checkClipState.result)}
                     </div>
 
+                    {/* Transcribe Audio */}
+                    <div className="bg-white rounded-lg shadow p-6">
+                        <h2 className="text-xl font-semibold mb-4 text-indigo-600">5. Transcribe Audio</h2>
+                        <p className="text-sm text-gray-600 mb-4">POST /api/transcribe-audio</p>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Audio File</label>
+                                <input
+                                    type="file"
+                                    accept="audio/*"
+                                    onChange={(e) => setTranscribeAudioState(prev => ({ ...prev, audioFile: e.target.files?.[0] || null }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                />
+                                {transcribeAudioState.audioFile && (
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Selected: {transcribeAudioState.audioFile.name} ({(transcribeAudioState.audioFile.size / 1024 / 1024).toFixed(2)} MB)
+                                    </p>
+                                )}
+                            </div>
+
+                            <button
+                                onClick={testTranscribeAudio}
+                                disabled={transcribeAudioState.loading || !transcribeAudioState.audioFile}
+                                className="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                            >
+                                {transcribeAudioState.loading ? 'Transcribing...' : 'Test Audio Transcription'}
+                            </button>
+                        </div>
+
+                        {renderResult(transcribeAudioState.result)}
+                    </div>
+
+                    {/* Timing-Aware SSML */}
+                    <div className="bg-white rounded-lg shadow p-6">
+                        <h2 className="text-xl font-semibold mb-4 text-pink-600">6. Timing-Aware SSML</h2>
+                        <p className="text-sm text-gray-600 mb-4">POST /api/text-to-ssml-with-timing</p>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Transcript</label>
+                                <textarea
+                                    value={timingAwareSSMLState.transcript}
+                                    onChange={(e) => setTimingAwareSSMLState(prev => ({ ...prev, transcript: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-pink-500 focus:border-transparent"
+                                    rows={3}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Word Timings</label>
+                                <p className="text-xs text-gray-500 mb-2">
+                                    {timingAwareSSMLState.wordTimings.length} words with timing data
+                                    {timingAwareSSMLState.wordTimings.length === 0 && ' (use transcribe audio first)'}
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={testTimingAwareSSML}
+                                disabled={timingAwareSSMLState.loading}
+                                className="w-full bg-pink-600 text-white py-2 px-4 rounded-md hover:bg-pink-700 disabled:opacity-50"
+                            >
+                                {timingAwareSSMLState.loading ? 'Generating...' : 'Test Timing-Aware SSML'}
+                            </button>
+                        </div>
+
+                        {renderResult(timingAwareSSMLState.result)}
+                    </div>
+
+                    {/* Process Audio (Full Pipeline) */}
+                    <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
+                        <h2 className="text-xl font-semibold mb-4 text-red-600">7. Process Audio (Full Pipeline)</h2>
+                        <p className="text-sm text-gray-600 mb-4">POST /api/process-audio</p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Audio File</label>
+                                <input
+                                    type="file"
+                                    accept="audio/*"
+                                    onChange={(e) => setProcessAudioState(prev => ({ ...prev, audioFile: e.target.files?.[0] || null }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                />
+                                {processAudioState.audioFile && (
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        {processAudioState.audioFile.name}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Target Language (Optional)</label>
+                                <input
+                                    type="text"
+                                    value={processAudioState.targetLanguage}
+                                    onChange={(e) => setProcessAudioState(prev => ({ ...prev, targetLanguage: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    placeholder="e.g., Spanish"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Voice ID (Optional)</label>
+                                <input
+                                    type="text"
+                                    value={processAudioState.voiceId}
+                                    onChange={(e) => setProcessAudioState(prev => ({ ...prev, voiceId: e.target.value }))}
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                                    placeholder="Resemble AI Voice ID"
+                                />
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={testProcessAudio}
+                            disabled={processAudioState.loading || !processAudioState.audioFile}
+                            className="w-full bg-red-600 text-white py-2 px-4 rounded-md hover:bg-red-700 disabled:opacity-50"
+                        >
+                            {processAudioState.loading ? 'Processing...' : 'Test Full Audio Pipeline'}
+                        </button>
+
+                        {renderResult(processAudioState.result)}
+                    </div>
+
                     {/* Process Text (Full Pipeline) */}
                     <div className="bg-white rounded-lg shadow p-6 lg:col-span-2">
-                        <h2 className="text-xl font-semibold mb-4 text-red-600">5. Process Text (Full Pipeline)</h2>
+                        <h2 className="text-xl font-semibold mb-4 text-gray-600">8. Process Text (Legacy Pipeline)</h2>
                         <p className="text-sm text-gray-600 mb-4">POST /api/process-text</p>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -460,9 +709,15 @@ export default function DebugPage() {
                     <p className="text-sm text-yellow-700 mb-3">
                         Make sure you have the following environment variables configured:
                     </p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
-                            <h4 className="font-medium text-yellow-800 mb-2">OpenAI (for translation)</h4>
+                            <h4 className="font-medium text-yellow-800 mb-2">Deepgram (for speech-to-text)</h4>
+                            <ul className="text-sm text-yellow-700 space-y-1">
+                                <li>• <code className="bg-yellow-100 px-2 py-1 rounded">DEEPGRAM_API_KEY</code></li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 className="font-medium text-yellow-800 mb-2">OpenAI (for SSML & translation)</h4>
                             <ul className="text-sm text-yellow-700 space-y-1">
                                 <li>• <code className="bg-yellow-100 px-2 py-1 rounded">OPENAI_API_KEY</code></li>
                             </ul>

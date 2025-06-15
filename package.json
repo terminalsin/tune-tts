@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@deepgram/sdk": "^4.4.0",
     "@resemble/node": "^3.4.2",
     "ai": "^4.3.16",
     "inflection-ai-sdk-provider": "^1.0.10",

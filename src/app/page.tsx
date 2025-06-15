@@ -9,27 +9,47 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
+  const [inputMode, setInputMode] = useState<'text' | 'audio'>('text');
+  const [audioFile, setAudioFile] = useState<File | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text.trim()) return;
+
+    if (inputMode === 'text' && !text.trim()) return;
+    if (inputMode === 'audio' && !audioFile) return;
 
     setLoading(true);
     setError('');
     setResult(null);
 
     try {
-      const response = await fetch('/api/process-text', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: text.trim(),
-          targetLanguage: targetLanguage || undefined,
-          voiceId: voiceId || undefined,
-        }),
-      });
+      let response;
+
+      if (inputMode === 'text') {
+        // Process text input (existing functionality)
+        response = await fetch('/api/process-text', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text: text.trim(),
+            targetLanguage: targetLanguage || undefined,
+            voiceId: voiceId || undefined,
+          }),
+        });
+      } else {
+        // Process audio input (new functionality)
+        const formData = new FormData();
+        formData.append('audio', audioFile!);
+        if (targetLanguage) formData.append('targetLanguage', targetLanguage);
+        if (voiceId) formData.append('voiceId', voiceId);
+
+        response = await fetch('/api/process-audio', {
+          method: 'POST',
+          body: formData,
+        });
+      }
 
       const data = await response.json();
 
@@ -102,11 +122,11 @@ export default function Home() {
           <div className="flex flex-wrap justify-center gap-2 text-sm text-gray-500">
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-              Inflection AI SSML
+              Deepgram Speech-to-Text
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-              OpenAI Translation
+              OpenAI GPT-4o
             </span>
             <span className="flex items-center gap-1">
               <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
@@ -123,42 +143,122 @@ export default function Home() {
               <h2 className="text-2xl font-semibold text-gray-900 mb-6">Create Your Dub</h2>
 
               <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Input Mode Selector */}
                 <div>
-                  <label htmlFor="text" className="block text-sm font-medium text-gray-700 mb-3">
-                    Script Content
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Input Method
                   </label>
-                  <div className="relative">
-                    <textarea
-                      id="text"
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      className="w-full px-4 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none transition-all"
-                      rows={6}
-                      placeholder="Enter your script or dialogue here..."
-                      required
-                    />
-                    <div className="absolute bottom-3 right-3 text-xs text-gray-400">
-                      {text.length}/10,000
-                    </div>
-                  </div>
-
-                  {/* Sample Text Suggestions */}
-                  <div className="mt-3">
-                    <p className="text-xs text-gray-500 mb-2">Try these samples:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {sampleTexts.map((sample, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          onClick={() => setText(sample)}
-                          className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"
-                        >
-                          Sample {index + 1}
-                        </button>
-                      ))}
-                    </div>
+                  <div className="flex rounded-xl bg-gray-100 p-1">
+                    <button
+                      type="button"
+                      onClick={() => setInputMode('text')}
+                      className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'text'
+                        ? 'bg-white text-purple-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                      📝 Text Input
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setInputMode('audio')}
+                      className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'audio'
+                        ? 'bg-white text-purple-600 shadow-sm'
+                        : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                    >
+                      🎤 Audio Upload
+                    </button>
                   </div>
                 </div>
+
+                {/* Text Input */}
+                {inputMode === 'text' && (
+                  <div>
+                    <label htmlFor="text" className="block text-sm font-medium text-gray-700 mb-3">
+                      Script Content
+                    </label>
+                    <div className="relative">
+                      <textarea
+                        id="text"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        className="w-full px-4 py-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none transition-all"
+                        rows={6}
+                        placeholder="Enter your script or dialogue here..."
+                        required
+                      />
+                      <div className="absolute bottom-3 right-3 text-xs text-gray-400">
+                        {text.length}/10,000
+                      </div>
+                    </div>
+
+                    {/* Sample Text Suggestions */}
+                    <div className="mt-3">
+                      <p className="text-xs text-gray-500 mb-2">Try these samples:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {sampleTexts.map((sample, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => setText(sample)}
+                            className="text-xs px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-gray-600 transition-colors"
+                          >
+                            Sample {index + 1}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Audio Input */}
+                {inputMode === 'audio' && (
+                  <div>
+                    <label htmlFor="audio" className="block text-sm font-medium text-gray-700 mb-3">
+                      Audio File
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="audio"
+                        type="file"
+                        accept="audio/*"
+                        onChange={(e) => setAudioFile(e.target.files?.[0] || null)}
+                        className="hidden"
+                        required
+                      />
+                      <label
+                        htmlFor="audio"
+                        className={`w-full px-4 py-6 border-2 border-dashed rounded-xl cursor-pointer transition-all ${audioFile
+                          ? 'border-purple-300 bg-purple-50'
+                          : 'border-gray-300 hover:border-purple-300 hover:bg-purple-50'
+                          }`}
+                      >
+                        <div className="text-center">
+                          {audioFile ? (
+                            <div>
+                              <div className="text-purple-600 text-2xl mb-2">🎵</div>
+                              <p className="text-sm font-medium text-purple-700">{audioFile.name}</p>
+                              <p className="text-xs text-purple-600">
+                                {(audioFile.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <div className="text-gray-400 text-2xl mb-2">🎤</div>
+                              <p className="text-sm font-medium text-gray-700">
+                                Click to upload audio file
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                WAV, MP3, MP4, OGG, or WebM format
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
@@ -200,7 +300,7 @@ export default function Home() {
 
                 <button
                   type="submit"
-                  disabled={loading || !text.trim()}
+                  disabled={loading || (inputMode === 'text' && !text.trim()) || (inputMode === 'audio' && !audioFile)}
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-4 px-8 rounded-xl font-semibold text-lg hover:from-purple-700 hover:to-blue-700 focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] active:scale-[0.98]"
                 >
                   {loading ? (
@@ -211,7 +311,7 @@ export default function Home() {
                   ) : (
                     <div className="flex items-center justify-center gap-2">
                       <span>🎭</span>
-                      Generate Dub
+                      {inputMode === 'audio' ? 'Process Audio' : 'Generate Dub'}
                     </div>
                   )}
                 </button>
@@ -256,12 +356,42 @@ export default function Home() {
                     <span className="text-green-600 text-lg">✨</span>
                   </div>
                   <div>
-                    <h3 className="text-green-800 font-semibold text-lg">Dub Generated Successfully!</h3>
+                    <h3 className="text-green-800 font-semibold text-lg">
+                      {inputMode === 'audio' ? 'Audio Processed Successfully!' : 'Dub Generated Successfully!'}
+                    </h3>
                     <p className="text-green-600 text-sm">Your content has been transformed</p>
                   </div>
                 </div>
 
                 <div className="space-y-6">
+                  {/* Transcription Info (for audio input) */}
+                  {result.transcription && (
+                    <div className="bg-white rounded-xl p-4">
+                      <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        Transcription Results
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Original File:</span>
+                          <span className="text-gray-900 font-medium">{result.originalFilename}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Duration:</span>
+                          <span className="text-gray-900 font-medium">{result.transcription.duration?.toFixed(2)}s</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Word Count:</span>
+                          <span className="text-gray-900 font-medium">{result.transcription.wordCount}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Avg Confidence:</span>
+                          <span className="text-gray-900 font-medium">{(result.transcription.confidence * 100).toFixed(1)}%</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Processing Pipeline */}
                   <div className="bg-white rounded-xl p-4">
                     <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
@@ -325,6 +455,14 @@ export default function Home() {
                       Technical Details
                     </summary>
                     <div className="space-y-4 text-sm">
+                      {result.transcription && (
+                        <div>
+                          <h5 className="font-medium text-gray-700 mb-2">Original Transcript:</h5>
+                          <pre className="bg-gray-50 p-3 rounded-lg text-xs overflow-x-auto text-gray-600 border">
+                            {result.transcription.transcript}
+                          </pre>
+                        </div>
+                      )}
                       <div>
                         <h5 className="font-medium text-gray-700 mb-2">Generated SSML:</h5>
                         <pre className="bg-gray-50 p-3 rounded-lg text-xs overflow-x-auto text-gray-600 border">
@@ -337,6 +475,22 @@ export default function Home() {
                           <pre className="bg-gray-50 p-3 rounded-lg text-xs overflow-x-auto text-gray-600 border">
                             {result.translatedSSML}
                           </pre>
+                        </div>
+                      )}
+                      {result.timingAnalysis && (
+                        <div>
+                          <h5 className="font-medium text-gray-700 mb-2">Timing Analysis:</h5>
+                          <div className="bg-gray-50 p-3 rounded-lg border">
+                            <p className="text-xs text-gray-600">
+                              Average speaking rate: {result.timingAnalysis.averageSpeakingRate.toFixed(2)} words/sec
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Significant pauses: {result.timingAnalysis.significantPauses.length}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Speech segments: {result.timingAnalysis.speechSegments.length}
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -355,8 +509,8 @@ export default function Home() {
                       <span className="text-purple-600 font-semibold text-sm">1</span>
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900">Script Analysis</h4>
-                      <p className="text-gray-600 text-sm">AI analyzes your text and converts it to SSML with natural intonation markers</p>
+                      <h4 className="font-medium text-gray-900">Audio Processing</h4>
+                      <p className="text-gray-600 text-sm">Upload audio files to extract text with precise timing information using Deepgram</p>
                     </div>
                   </div>
                   <div className="flex gap-4">
@@ -364,8 +518,8 @@ export default function Home() {
                       <span className="text-blue-600 font-semibold text-sm">2</span>
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900">Language Translation</h4>
-                      <p className="text-gray-600 text-sm">Content is translated while preserving emotional context and speaking patterns</p>
+                      <h4 className="font-medium text-gray-900">Intelligent SSML Generation</h4>
+                      <p className="text-gray-600 text-sm">AI creates SSML with natural timing, pauses, and prosody based on original speech patterns</p>
                     </div>
                   </div>
                   <div className="flex gap-4">
@@ -373,8 +527,8 @@ export default function Home() {
                       <span className="text-green-600 font-semibold text-sm">3</span>
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900">Voice Generation</h4>
-                      <p className="text-gray-600 text-sm">High-quality voice synthesis creates natural-sounding speech in your target language</p>
+                      <h4 className="font-medium text-gray-900">High-Quality Voice Synthesis</h4>
+                      <p className="text-gray-600 text-sm">Generate natural-sounding speech that preserves the original timing and emotion</p>
                     </div>
                   </div>
                 </div>
@@ -388,18 +542,24 @@ export default function Home() {
           <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl p-8">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Environment Setup</h3>
             <p className="text-gray-600 mb-4">To use Tune, configure these environment variables:</p>
-            <div className="grid md:grid-cols-2 gap-6 text-sm">
+            <div className="grid md:grid-cols-3 gap-6 text-sm">
+              <div>
+                <h4 className="font-medium text-gray-700 mb-2">🎤 Speech Processing</h4>
+                <ul className="space-y-1 text-gray-600">
+                  <li><code className="bg-white px-2 py-1 rounded border">DEEPGRAM_API_KEY</code></li>
+                </ul>
+              </div>
               <div>
                 <h4 className="font-medium text-gray-700 mb-2">🤖 AI Services</h4>
                 <ul className="space-y-1 text-gray-600">
                   <li><code className="bg-white px-2 py-1 rounded border">OPENAI_API_KEY</code></li>
-                  <li><code className="bg-white px-2 py-1 rounded border">RESEMBLE_TOKEN</code></li>
-                  <li><code className="bg-white px-2 py-1 rounded border">RESEMBLE_ENDPOINT</code></li>
                 </ul>
               </div>
               <div>
-                <h4 className="font-medium text-gray-700 mb-2">🎵 Voice Configuration</h4>
+                <h4 className="font-medium text-gray-700 mb-2">🎵 Voice Synthesis</h4>
                 <ul className="space-y-1 text-gray-600">
+                  <li><code className="bg-white px-2 py-1 rounded border">RESEMBLE_TOKEN</code></li>
+                  <li><code className="bg-white px-2 py-1 rounded border">RESEMBLE_ENDPOINT</code></li>
                   <li><code className="bg-white px-2 py-1 rounded border">RESEMBLE_PROJECT_ID</code></li>
                   <li><code className="bg-white px-2 py-1 rounded border">RESEMBLE_VOICE_ID</code></li>
                 </ul>
